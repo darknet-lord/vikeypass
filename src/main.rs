@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs;
+use std::error::Error;
 use crossterm::{
     event::{self, Event as CEvent, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode},
@@ -57,6 +59,13 @@ fn to_clipboard(text: &str) {
     });
 }
 
+fn load_database() -> Result<HashMap<String, String>, Box<dyn Error>> {
+    let data = fs::read_to_string(".vikeypass.json")
+        .expect("Should have been able to read the file");
+    let map: HashMap<String, String> = serde_json::from_str(&data).unwrap();
+    Ok(map)
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     enable_raw_mode().expect("can run in raw mode");
 
@@ -86,15 +95,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut footer_message = "";
 
     let menu_titles = vec!["Home", "Add", "Edit", "Delete", "Quit"];
-    let mut passwords = HashMap::from([
-        ("simple", "123"),
-        ("admin", "admin"),
-        ("gmail1", "root"),
-        ("gmail2", "toor"),
-    ]);
-
+    let mut passwords = load_database().unwrap();
     let mut selected_idx = 0;
-    let mut sel_item = SelectedItem{background: Color::Black};
 
     let stdout = io::stdout();
     let backend = CrosstermBackend::new(stdout);
@@ -116,10 +118,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .as_ref(),
                 ).split(size);
 
-            let items: Vec<ListItem> = passwords.keys().enumerate().map(|(idx, &keyname)| {
+            let items: Vec<ListItem> = passwords.keys().enumerate().map(|(idx, keyname)| {
                 match idx {
-                    i if i == selected_idx => ListItem::new(keyname).style(Style::default().bg(Color::Yellow)),
-                    _ => ListItem::new(keyname).style(Style::default().bg(Color::Black)),
+                    i if i == selected_idx => ListItem::new(keyname.clone()).style(Style::default().bg(Color::Yellow)),
+                    _ => ListItem::new(keyname.clone()).style(Style::default().bg(Color::Black)),
                 }
             }).collect();
 
@@ -192,7 +194,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
                 KeyCode::Char('d') => {
                     let key = passwords.keys().nth(selected_idx as usize).unwrap();
-                    passwords.remove(*key).unwrap();
+                    passwords.remove(&key.clone()).unwrap();
                     footer_message = "Entry has been destroyed";
                 },
                 _ => ()
