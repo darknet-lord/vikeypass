@@ -49,14 +49,12 @@ fn get_masterkey() -> KeyringResult<String> {
 fn to_clipboard(text: &str) {
     let mut clipboard = Clipboard::new().unwrap();
     clipboard.set_text(text).unwrap();
-    /*
-    TODO: Wait and clear concurrently.
 
-    let ten_millis = time::Duration::from_millis(10000);
-    let now = time::Instant::now();
-    thread::sleep(ten_millis);
-    clipboard.set_text("").unwrap();
-    */
+    thread::spawn(move || {
+        let ten_millis = time::Duration::from_millis(10000);
+        thread::sleep(ten_millis);
+        clipboard.set_text("").unwrap();
+    });
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
