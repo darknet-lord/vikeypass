@@ -16,7 +16,7 @@ use tui::{
     style::{Color, Modifier, Style},
     text::{Span, Spans},
     widgets::{
-        Block, BorderType, Borders, List, ListItem, Paragraph, Tabs,
+        Block, BorderType, Borders, List, ListItem, Paragraph,
     },
     Terminal,
 };
@@ -28,7 +28,7 @@ use keyring::{Entry, Result as KeyringResult};
 
 use magic_crypt::MagicCryptTrait;
 
-
+#[derive(Debug, Clone)]
 enum InputMode {
     Navigation,
     Command,
@@ -37,6 +37,57 @@ enum InputMode {
 enum Event<I> {
     Input(I),
     Tick,
+}
+
+#[derive(Debug)]
+enum Action {
+    AddPassword,
+    EditPassword,
+}
+
+struct Command {
+    action: Action,
+    params: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct App {
+    input: String,
+    input_mode: InputMode,
+}
+
+impl App {
+    fn decode_command(&self) -> Command {
+        let mut parts = self.input.split_whitespace().into_iter();
+        let command = parts.next();
+        match command {
+            Some("add") => Command{action: Action::AddPassword, params: parts.into_iter().map(str::to_string).collect()},
+            Some("edit") => Command{action: Action::EditPassword, params: parts.into_iter().map(str::to_string).collect()},
+            Some(cmd) => panic!("Command doesn't exist: {}", cmd),
+            None => panic!("Unable to parse command!"),
+        }
+    }
+
+    fn activate_navigation_mode(&mut self) {
+        self.input_mode = InputMode::Navigation;
+    }
+
+    fn add_to_input(&mut self, s: &String) {
+        self.input.push_str(s);
+    }
+
+    fn get_input(&self) -> &String {
+        return &self.input;
+    }
+}
+
+impl Default for App {
+    fn default() -> App {
+        App {
+            input: String::new(),
+            input_mode: InputMode::Navigation,
+        }
+    }
 }
 
 fn set_masterkey(masterkey: String) -> () {
@@ -98,9 +149,8 @@ fn get_database_filepath() -> String {
     }
 }
 
-
-fn execute (command: &String) {
-    println!("{}", command);
+fn execute (command: &Command) {
+    println!("{:?}", command.action);
 }
 
 
@@ -131,9 +181,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     });
+    let mut app = App::default();
 
     let mut footer_message = "";
-    let menu_titles = vec!["Home", "Add", "Edit", "Delete", "Quit"];
     let mut passwords = load_database().unwrap();
     let mut selected_idx = 0;
 
@@ -141,8 +191,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
-    let mut input_mode = InputMode::Navigation;
-    let mut command_buffer = String::new();
 
     loop {
         terminal.draw(|rect| {
@@ -159,7 +207,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .as_ref(),
                 ).split(size);
 
-            let command = Paragraph::new(&*command_buffer)
+            let command = Paragraph::new(&*app.input)
                 .style(Style::default().fg(Color::White))
                 .alignment(Alignment::Center)
                 .block(
@@ -205,12 +253,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
         match rx.recv()? {
-            Event::Input(event) => match input_mode {
+            Event::Input(event) => match app.input_mode {
                 InputMode::Navigation => {
                     match event.code {
                         KeyCode::Char('i') => {
-                            input_mode = InputMode::Command;
-                            command_buffer = String::from("");
+                            app.input_mode = InputMode::Command;
+                            app.input = String::from("");
                             footer_message = "Command";
                         },
                         KeyCode::Char('q') => {
@@ -247,49 +295,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 InputMode::Command => {
                     match event.code {
                         KeyCode::Esc => {
-                            input_mode = InputMode::Navigation;
+                            app.activate_navigation_mode();
                             footer_message = "Navigation";
                         },
-                        KeyCode::Enter => {
-                            execute(&command_buffer);
+                        KeyCode::Backspace => {
+                            app.input.pop();
                         },
                         KeyCode::Char(c) => {
-                            command_buffer.push_str(&String::from(c));
+                            let s = String::from(c);
+                            app.add_to_input(&s);
+                        },
+                        KeyCode::Enter => {
+                            let cmd = app.decode_command();
+                            execute(&cmd);
                         },
                         _ => (),
                     }
                 }
-                /*
-                KeyCode::Char('q') => {
-                    disable_raw_mode()?;
-                    terminal.show_cursor()?;
-                    break;
-                },
-                KeyCode::Char('j') => {
-                    if selected_idx < passwords.len() - 1 {
-                        selected_idx += 1
-                    }
-                },
-                KeyCode::Char('k') => {
-                    if selected_idx > 0 {
-                        selected_idx -= 1
-                    }
-                },
-                KeyCode::Char('y') => {
-                    let key = passwords.keys().nth(selected_idx as usize).unwrap();
-                    let pwd = passwords.get(key).unwrap();
-                    to_clipboard(pwd);
-                    footer_message = "Password copied for 10 seconds";
-                },
-                KeyCode::Char('d') => {
-                    let key = passwords.keys().nth(selected_idx as usize).unwrap();
-                    passwords.remove(&key.clone()).unwrap();
-                    footer_message = "Entry has been destroyed";
-                    // TODO: Save the changes.
-                    // save_database(&passwords);
-                },
-                _ => ()
-                */
             },
             Event::Tick => {}
         }
