@@ -29,6 +29,11 @@ use keyring::{Entry, Result as KeyringResult};
 use magic_crypt::MagicCryptTrait;
 
 
+enum InputMode {
+    Navigation,
+    Command,
+}
+
 enum Event<I> {
     Input(I),
     Tick,
@@ -93,6 +98,12 @@ fn get_database_filepath() -> String {
     }
 }
 
+
+fn execute (command: &String) {
+    println!("{}", command);
+}
+
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // TODO: Add to setup.
     // set_masterkey(String::from("masterkey"));
@@ -130,6 +141,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
+    let mut input_mode = InputMode::Navigation;
+    let mut command_buffer = String::new();
 
     loop {
         terminal.draw(|rect| {
@@ -146,6 +159,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .as_ref(),
                 ).split(size);
 
+            let command = Paragraph::new(&*command_buffer)
+                .style(Style::default().fg(Color::White))
+                .alignment(Alignment::Center)
+                .block(
+                    Block::default()
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(Color::White))
+                    .title("Command")
+                    .border_type(BorderType::Plain),
+                );
+
+
             let items: Vec<ListItem> = passwords.keys().enumerate().map(|(idx, keyname)| {
                 match idx {
                     i if i == selected_idx => ListItem::new(keyname.clone())
@@ -155,33 +180,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }).collect();
 
+
             let list = List::new(items)
                 .block(Block::default().title("Passwords").borders(Borders::ALL))
                 .style(Style::default().fg(Color::White))
                 .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
                 .highlight_symbol(">>");
-
-            let menu = menu_titles
-                .iter()
-                .map(|t| {
-                    let (first, rest) = t.split_at(1);
-                    Spans::from(vec![
-                        Span::styled(
-                            first,
-                            Style::default()
-                                .fg(Color::Yellow)
-                                .add_modifier(Modifier::UNDERLINED),
-                        ),
-                        Span::styled(rest, Style::default().fg(Color::White)),
-                    ])
-                })
-                .collect();
-
-            let tabs = Tabs::new(menu)
-                .block(Block::default().title("Menu").borders(Borders::ALL))
-                .style(Style::default().fg(Color::White))
-                .highlight_style(Style::default().fg(Color::Yellow))
-                .divider(Span::raw("|"));
 
             let footer = Paragraph::new(footer_message)
                 .style(Style::default().fg(Color::White))
@@ -194,13 +198,68 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .border_type(BorderType::Plain),
                 );
 
-            rect.render_widget(tabs, chunks[0]);
+            rect.render_widget(command, chunks[0]);
             rect.render_widget(list, chunks[1]);
             rect.render_widget(footer, chunks[2]);
         })?;
 
+
         match rx.recv()? {
-            Event::Input(event) => match event.code {
+            Event::Input(event) => match input_mode {
+                InputMode::Navigation => {
+                    match event.code {
+                        KeyCode::Char('i') => {
+                            input_mode = InputMode::Command;
+                            command_buffer = String::from("");
+                            footer_message = "Command";
+                        },
+                        KeyCode::Char('q') => {
+                            disable_raw_mode()?;
+                            terminal.show_cursor()?;
+                            break;
+                        },
+                        KeyCode::Char('j') => {
+                            if selected_idx < passwords.len() - 1 {
+                                selected_idx += 1
+                            }
+                        },
+                        KeyCode::Char('k') => {
+                            if selected_idx > 0 {
+                                selected_idx -= 1
+                            }
+                        },
+                        KeyCode::Char('y') => {
+                            let key = passwords.keys().nth(selected_idx as usize).unwrap();
+                            let pwd = passwords.get(key).unwrap();
+                            to_clipboard(pwd);
+                            footer_message = "Password copied for 10 seconds";
+                        },
+                        KeyCode::Char('d') => {
+                            let key = passwords.keys().nth(selected_idx as usize).unwrap();
+                            passwords.remove(&key.clone()).unwrap();
+                            footer_message = "Entry has been destroyed";
+                            // TODO: Save the changes.
+                            // save_database(&passwords);
+                        },
+                        _ => (),
+                    }
+                },
+                InputMode::Command => {
+                    match event.code {
+                        KeyCode::Esc => {
+                            input_mode = InputMode::Navigation;
+                            footer_message = "Navigation";
+                        },
+                        KeyCode::Enter => {
+                            execute(&command_buffer);
+                        },
+                        KeyCode::Char(c) => {
+                            command_buffer.push_str(&String::from(c));
+                        },
+                        _ => (),
+                    }
+                }
+                /*
                 KeyCode::Char('q') => {
                     disable_raw_mode()?;
                     terminal.show_cursor()?;
@@ -230,6 +289,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // save_database(&passwords);
                 },
                 _ => ()
+                */
             },
             Event::Tick => {}
         }
