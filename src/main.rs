@@ -68,10 +68,6 @@ impl App {
         }
     }
 
-    fn activate_navigation_mode(&mut self) {
-        self.input_mode = InputMode::Navigation;
-    }
-
     fn add_to_input(&mut self, s: &String) {
         self.input.push_str(s);
     }
@@ -295,7 +291,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 InputMode::Command => {
                     match event.code {
                         KeyCode::Esc => {
-                            app.activate_navigation_mode();
+                            app.input_mode = InputMode::Navigation;
                             footer_message = "Navigation";
                         },
                         KeyCode::Backspace => {
