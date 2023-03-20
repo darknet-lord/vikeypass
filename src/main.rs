@@ -71,10 +71,6 @@ impl App {
     fn add_to_input(&mut self, s: &String) {
         self.input.push_str(s);
     }
-
-    fn get_input(&self) -> &String {
-        return &self.input;
-    }
 }
 
 impl Default for App {
@@ -145,8 +141,21 @@ fn get_database_filepath() -> String {
     }
 }
 
-fn execute (command: &Command) {
-    println!("{:?}", command.action);
+fn execute (command: &Command) -> Result<&str, Box<dyn std::error::Error>> {
+    let mut passwords = load_database().unwrap();
+    match command.action {
+        Action::AddPassword => {
+            passwords.insert(command.params[0].clone(), command.params[1].clone());
+            save_database(&passwords);
+            Ok("New password has been added")
+
+        },
+        Action::EditPassword => {
+            passwords.entry(command.params[0].clone()).and_modify(|pwd| *pwd = command.params[1].clone());
+            save_database(&passwords);
+            Ok("Updated successfully")
+        },
+    }
 }
 
 
@@ -283,7 +292,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             passwords.remove(&key.clone()).unwrap();
                             footer_message = "Entry has been destroyed";
                             // TODO: Save the changes.
-                            // save_database(&passwords);
+                            save_database(&passwords);
                         },
                         _ => (),
                     }
@@ -303,7 +312,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         },
                         KeyCode::Enter => {
                             let cmd = app.decode_command();
-                            execute(&cmd);
+                            let result = execute(&cmd);
+                            match result {
+                                Ok(_) => {footer_message = "Command completed"},
+                                Err(_) => {footer_message = "Command failed"},
+                            }
                         },
                         _ => (),
                     }
