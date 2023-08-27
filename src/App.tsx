@@ -1,11 +1,26 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/tauri";
 import "./App.css";
+import Button from '@mui/material/Button';
+import TextField from "@mui/material/TextField";
+import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
+import { DataGrid, GridColDef } from '@mui/x-data-grid';
+
 
 function App() {
+
   const obj: {[index: string]:any} = {}
   const [passwords, updatePasswordsList] = useState(obj);
   const [name, setName] = useState("");
+  const columns: GridColDef[] = [
+    {
+      field: 'id',
+      headerName: 'Name',
+      width: 150,
+    },
+  ];
+
 
   async function getPasswords() {
     const data: object = await invoke("get_passwords")
@@ -13,33 +28,54 @@ function App() {
   }
 
   function renderPasswords() {
-    return Object.keys(passwords).map((keyName: string, i: number) => (
-      <li className="travelcompany-input" key={i}>
-          <span className="input-label">key: {i} Name: {passwords[keyName]}</span>
-      </li>
-    ))
+    const rows = Object.keys(passwords).map((keyName: string) => {return {id: keyName}});
+    console.log("hello", rows);
+
+    return (
+      <>
+      <Box sx={{ height: 400, width: '100%' }}>
+      <DataGrid
+        rows={rows}
+        columns={columns}
+        initialState={{
+          pagination: {
+            paginationModel: {
+              pageSize: 5,
+            },
+          },
+        }}
+        pageSizeOptions={[5]}
+        checkboxSelection
+        disableRowSelectionOnClick
+      />
+    </Box>
+    </>
+    );
   }
 
   return (
     <div className="container">
       <h1>Vikeypass</h1>
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          getPasswords()
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a password..."
-        />
-        <button type="submit">Find</button>
-      </form>
+      <Paper>
 
-      <p>{renderPasswords()}</p>
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            getPasswords()
+          }}
+        >
+          <TextField
+            id="greet-input"
+            onChange={(e) => setName(e.currentTarget.value)}
+            placeholder="Enter a password..."
+          />
+          <Button type="submit" variant="contained">Find</Button>
+        </form>
+
+        <p>{renderPasswords()}</p>
+      </Paper>
     </div>
   );
 }
